@@ -355,6 +355,13 @@ aten_convolution = ExternKernelChoice(
 )
 
 
+def _conv_allow_tf32() -> bool:
+    # Follow the setting eager convolutions use. The cuDNN-wide
+    # torch.backends.cudnn.fp32_precision defaults to "none", while the
+    # convolution setting defaults to "tf32".
+    return torch.backends.cudnn.conv.fp32_precision == "tf32"
+
+
 def conv1x1_via_mm(x, w, *, out):
     w = torch.squeeze(torch.squeeze(w, -1), -1)
     return torch.matmul(
@@ -681,7 +688,7 @@ def convolution(
                     # TODO(jansel): try unroll for bigger kernels once fixed:
                     #               https://github.com/triton-lang/triton/issues/1254
                     UNROLL=unroll,
-                    ALLOW_TF32=torch.backends.cudnn.fp32_precision == "tf32",
+                    ALLOW_TF32=_conv_allow_tf32(),
                     num_stages=cfg.num_stages,
                     num_warps=num_warps,
                     **cfg.kwargs,
@@ -704,7 +711,7 @@ def convolution(
                     # TODO(jansel): try unroll for bigger kernels once fixed:
                     #               https://github.com/triton-lang/triton/issues/1254
                     UNROLL=unroll,
-                    ALLOW_TF32=torch.backends.cudnn.fp32_precision == "tf32",
+                    ALLOW_TF32=_conv_allow_tf32(),
                     num_stages=cfg.num_stages,
                     num_warps=num_warps,
                     **cfg.kwargs,
@@ -746,7 +753,7 @@ def convolution(
                 DILATION_H=dilation[0],
                 DILATION_W=dilation[1],
                 GROUPS=groups,
-                ALLOW_TF32=torch.backends.cudnn.fp32_precision == "tf32",
+                ALLOW_TF32=_conv_allow_tf32(),
                 num_stages=cfg.num_stages,
                 num_warps=cfg.num_warps,
                 **cfg.kwargs,
@@ -1149,7 +1156,7 @@ def convolution_backward_lowering(
                         DILATION_H=dilation[0],
                         DILATION_W=dilation[1],
                         GROUPS=groups,
-                        ALLOW_TF32=torch.backends.cudnn.allow_tf32,
+                        ALLOW_TF32=_conv_allow_tf32(),
                         num_stages=cfg.num_stages,
                         num_warps=cfg.num_warps,
                         **cfg.kwargs,
@@ -1205,7 +1212,7 @@ def convolution_backward_lowering(
                         DILATION_H=dilation[0],
                         DILATION_W=dilation[1],
                         GROUPS=groups,
-                        ALLOW_TF32=torch.backends.cudnn.allow_tf32,
+                        ALLOW_TF32=_conv_allow_tf32(),
                         num_stages=cfg.num_stages,
                         num_warps=cfg.num_warps,
                         **cfg.kwargs,

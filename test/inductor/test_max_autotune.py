@@ -1682,6 +1682,27 @@ class TestMaxAutotune(TestCase):
             actual = torch.compile(fn)(image, filt)
             torch.testing.assert_close(actual, expected, atol=6e-5, rtol=0.001)
 
+    @skipIfRocm
+    @skipIfXpu
+    @parametrize("conv_precision", ("tf32", "ieee"))
+    @config.patch(max_autotune=True, max_autotune_conv_backends="TRITON")
+    def test_conv_template_follows_cudnn_conv_precision(self, conv_precision):
+        # Eager convolutions use TF32 as torch.backends.cudnn.conv.fp32_precision
+        # sets, so the Triton template should follow that setting too, not the
+        # cuDNN-wide one, which defaults to "none".
+        m = torch.nn.Conv2d(32, 64, 3, padding=1, bias=False).to(GPU_TYPE)
+        inp = torch.randn(2, 32, 28, 28, device=GPU_TYPE)
+        old_precision = torch.backends.cudnn.conv.fp32_precision
+        torch.backends.cudnn.conv.fp32_precision = conv_precision
+        try:
+            with torch.no_grad():
+                _, code = run_and_get_code(torch.compile(m), inp)
+        finally:
+            torch.backends.cudnn.conv.fp32_precision = old_precision
+        FileCheck().check(
+            f"ALLOW_TF32 : tl.constexpr = {conv_precision == 'tf32'}"
+        ).run(code[0])
+
     @config.patch(
         max_autotune=True, max_autotune_conv_backends="", layout_optimization=False
     )

@@ -1725,6 +1725,8 @@ class FxGraphHashDetails:
         # resolved flag for every device in the graph so other backends
         # invalidate the FX graph cache when their flag changes.
         self.mm_template_allow_tf32 = self._mm_template_allow_tf32(gm, example_inputs)
+        # Global setting affecting convolution template codegen.
+        self.cudnn_conv_fp32_precision = torch.backends.cudnn.conv.fp32_precision
 
         # compile-on-one-rank changes wrapper and kernel codegen (runtime device
         # resolution, DeviceProperties(index=None)) even for graphs that contain no
