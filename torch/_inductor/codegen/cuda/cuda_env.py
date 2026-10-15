@@ -33,7 +33,9 @@ def is_datacenter_blackwell_arch() -> bool:
     if arch is None:
         return False
     arch_number = int(arch)
-    return arch_number >= 100 and arch_number < 110
+    # Jetson Thor is sm_110 since CUDA 13 (sm_101 before) and has the same
+    # tcgen05 tensor cores; consumer Blackwell (sm_120) does not.
+    return 100 <= arch_number < 120
 
 
 @clear_on_fresh_cache

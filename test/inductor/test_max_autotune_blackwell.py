@@ -566,6 +566,17 @@ class TestMaxAutotuneBlackwell(TestCase):
             {"in_ptr1": {"block_shape": [64]}},
         )
 
+    @parametrize(
+        "arch,expected",
+        (("90", False), ("100", True), ("103", True), ("110", True), ("120", False)),
+    )
+    def test_datacenter_blackwell_arch(self, arch: str, expected: bool):
+        from torch._inductor.codegen.cuda.cuda_env import is_datacenter_blackwell_arch
+
+        # The test case's fresh cache clears the cached arch around each test.
+        with config.patch({"cuda.arch": arch}):
+            self.assertEqual(is_datacenter_blackwell_arch(), expected)
+
     @unittest.skipIf(
         not has_datacenter_blackwell_tma_device(),
         "Need Blackwell with device-side TMA support in Triton",
