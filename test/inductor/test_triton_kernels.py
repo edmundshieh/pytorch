@@ -3033,6 +3033,50 @@ def forward(self, arg0_1, arg1_1):
         else:
             self.assertEqual(code.count("create_1d_tma_descriptor("), 2)
 
+    @requires_cuda_tma
+    @requires_gpu
+    @common_utils.parametrize("tma_version", ["new", "old"])
+    def test_tma_descriptor_read_after_write(self, tma_version):
+        if tma_version == "new" and not has_triton_tensor_descriptor_host_tma():
+            self.skipTest("requires triton.tools.tensor_descriptor TMA support")
+        if tma_version == "old" and not has_triton_experimental_host_tma():
+            self.skipTest("requires triton.tools.experimental_descriptor TMA support")
+
+        kernel = (
+            add_kernel_with_tma_1d_new_api
+            if tma_version == "new"
+            else add_kernel_with_tma_1d_old_api
+        )
+
+        def f(a, b):
+            BLOCK_SIZE = 256
+            tmp = torch.zeros_like(a)
+            out = torch.zeros_like(a)
+
+            desc_a, desc_b, desc_tmp, desc_out = (
+                create_tensor_descriptor_shim(
+                    t, [BLOCK_SIZE], new_api=(tma_version == "new")
+                )
+                for t in (a, b, tmp, out)
+            )
+
+            grid = lambda meta: (triton.cdiv(a.numel(), meta["BLOCK_SIZE"]),)
+            kernel[grid](desc_a, desc_b, desc_tmp, BLOCK_SIZE=BLOCK_SIZE)
+            # reads tmp through the descriptor the first kernel wrote it with
+            kernel[grid](desc_tmp, desc_b, desc_out, BLOCK_SIZE=BLOCK_SIZE)
+
+            return out
+
+        a = torch.randn(301, device=GPU_TYPE)
+        b = torch.randn(301, device=GPU_TYPE)
+
+        expected_out = a + b + b
+        eager_out = f(a, b)
+        compiled_out = torch.compile(f, fullgraph=True, backend="inductor")(a, b)
+
+        self.assertEqual(eager_out, expected_out)
+        self.assertEqual(compiled_out, expected_out)
+
     @requires_gpu
     @unittest.skipIf(
         not has_triton_tensor_descriptor_host_tma(),

@@ -526,6 +526,7 @@ class GraphLowering(torch.fx.Interpreter):
         # must not be computed straight into another buffer (see ConcatKernel).
         self.mutated_storages: OrderedSet[int] = get_mutated_storages(gm)
         self.sdpa_constraint_cache: dict[tuple, ir.IRNode] = {}
+        self.tma_descriptor_cache: dict[tuple[int, Any], ir.TMADescriptor] = {}
         # Buffers that are neither recycled nor freed. Aliasing kernels rely on
         # the second half: some have no output variable to free at all.
         self.never_reuse_buffers: OrderedSet[str] = OrderedSet()
@@ -1255,6 +1256,14 @@ class GraphLowering(torch.fx.Interpreter):
                 if alias not in seen:
                     seen.add(alias)
                     names.append(alias)
+
+        # A TMA descriptor reads its tensor when it is created, so readers after
+        # this mutation must not reuse one created before it.
+        self.tma_descriptor_cache = {
+            key: desc
+            for key, desc in self.tma_descriptor_cache.items()
+            if desc.get_tensor().get_name() not in seen
+        }
 
     def get_original_value_of_constant(self, name: str) -> torch.Tensor:
         """

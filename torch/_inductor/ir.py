@@ -8605,10 +8605,6 @@ class TMADescriptor(ExternKernel):
     (the old API and the new API)
     """
 
-    # as TMA descriptors are immutable,
-    # we can dedup them by the input args
-    _CACHE: dict[Any, TMADescriptor] = {}
-
     @classmethod
     def _create_impl(
         cls, tensor: IRNode, tma_meta: tuple[str, tuple[Any, ...]]
@@ -8626,10 +8622,13 @@ class TMADescriptor(ExternKernel):
     def create(
         cls, tensor: IRNode, tma_meta: tuple[str, tuple[Any, ...]]
     ) -> TMADescriptor:
+        # as TMA descriptors are immutable, we can dedup them by the input args
+        # until the tensor is mutated (see GraphLowering.mark_buffer_mutated)
         key = (id(tensor), tma_meta)
-        if key not in cls._CACHE:
-            cls._CACHE[key] = cls._create_impl(tensor, tma_meta)
-        return cls._CACHE[key]
+        cache = V.graph.tma_descriptor_cache
+        if key not in cache:
+            cache[key] = cls._create_impl(tensor, tma_meta)
+        return cache[key]
 
     def __init__(
         self, tensor: IRNode, inputs: Sequence[Any], constant_args: Sequence[Any]
